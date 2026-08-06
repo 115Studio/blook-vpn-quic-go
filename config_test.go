@@ -230,13 +230,11 @@ func TestConfigChromeParrotOverrides(t *testing.T) {
 
 func TestConfigChromeParrotForcesDatagrams(t *testing.T) {
 	// Chrome always advertises max_datagram_frame_size, so ChromeParrot must turn
-	// datagrams on and clear Hysteria's OmitMaxDatagramFrameSize quirk; otherwise
-	// the transport parameter set comes out one short of Chrome's.
+	// datagrams on; otherwise the transport parameter set comes out one short of
+	// Chrome's.
 	c := populateConfig(&Config{
-		ChromeParrot:             true,
-		EnableDatagrams:          false,
-		OmitMaxDatagramFrameSize: true,
+		ChromeParrot:    true,
+		EnableDatagrams: false,
 	})
 	require.True(t, c.EnableDatagrams)
-	require.False(t, c.OmitMaxDatagramFrameSize)
 }
