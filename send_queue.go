@@ -27,6 +27,8 @@ type sendQueue struct {
 	closeCalled chan struct{} // runStopped when Close() is called
 	runStopped  chan struct{} // runStopped when the run loop returns
 	available   chan struct{}
+	// inlineDisabled keeps every write on the goroutine (tests, or a conn that must not block the run loop).
+	inlineDisabled bool
 	conn        sendConn
 }
 
@@ -48,6 +50,17 @@ func newSendQueue(conn sendConn) sender {
 // Callers need to make sure that there's actually space in the send queue by calling WouldBlock.
 // Otherwise Send will panic.
 func (h *sendQueue) Send(p *packetBuffer, gsoSize uint16, ecn protocol.ECN) {
+	// An idle sender goroutine costs a park and a wake per batch on top of the syscall. When
+	// nothing is queued the caller writes the batch itself; a write the socket refuses for a
+	// reason other than size goes through the queue so Run surfaces the error as before.
+	if len(h.queue) == 0 && !h.inlineDisabled {
+		err := h.conn.Write(p.Data, gsoSize, ecn)
+		var tooLarge *DatagramTooLargeError
+		if err == nil || isSendMsgSizeErr(err) || errors.As(err, &tooLarge) {
+			p.Release()
+			return
+		}
+	}
 	select {
 	case h.queue <- queueEntry{buf: p, gsoSize: gsoSize, ecn: ecn}:
 		// clear available channel if we've reached capacity

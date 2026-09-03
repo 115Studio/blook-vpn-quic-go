@@ -76,7 +76,8 @@ func (h *receivedPacketTracker) IsPotentiallyDuplicate(pn protocol.PacketNumber)
 }
 
 // number of ack-eliciting packets received before sending an ACK
-const packetsBeforeAck = 2
+// packetsBeforeAck is a var so the tests written for the upstream value of 2 can keep it.
+var packetsBeforeAck = 20
 
 // The appDataReceivedPacketTracker tracks packets received in the Application Data packet number space.
 // It waits until at least 2 packets were received before queueing an ACK, or until the max_ack_delay was reached.

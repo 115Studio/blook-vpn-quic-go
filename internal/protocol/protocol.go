@@ -114,7 +114,7 @@ type StatelessResetToken [16]byte
 const MaxPacketBufferSize = 1452
 
 // MaxLargePacketBufferSize is used when using GSO
-const MaxLargePacketBufferSize = 20 * 1024
+const MaxLargePacketBufferSize = 64 * 1024
 
 // MinInitialPacketSize is the minimum size an Initial packet is required to have.
 const MinInitialPacketSize = 1200

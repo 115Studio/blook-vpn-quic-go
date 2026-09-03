@@ -2456,6 +2456,8 @@ func (c *Conn) applyTransportParameters() {
 	)
 }
 
+const ackPiggybackDelay = 5 * time.Millisecond
+
 func (c *Conn) triggerSending(now monotime.Time) error {
 	c.pacingDeadline = 0
 
@@ -2475,6 +2477,14 @@ func (c *Conn) triggerSending(now monotime.Time) error {
 		// Allow sending of an ACK if we're pacing limit.
 		// This makes sure that a peer that is mostly receiving data (and thus has an inaccurate cwnd estimate)
 		// sends enough ACKs to allow its peer to utilize the bandwidth.
+		//
+		// Unless the next batch is due almost immediately: a bulk sender that is paced in bursts
+		// had every incoming packet answered by an ACK-only datagram between two batches, which
+		// doubled its sendmsg count. Within ackPiggybackDelay the ACK rides the batch instead;
+		// the receiver's ack delay budget (max_ack_delay) is an order of magnitude larger.
+		if deadline.Sub(now) <= ackPiggybackDelay {
+			return nil
+		}
 		return c.maybeSendAckOnlyPacket(now)
 	case ackhandler.SendAck:
 		// We can at most send a single ACK only packet.
