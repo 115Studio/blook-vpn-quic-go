@@ -73,6 +73,14 @@ type oobConn struct {
 	messages []ipv4.Message
 	buffers  [batchSize]*packetBuffer
 
+	// With GRO the read buffers are persistent 64 KB slabs that can hold a whole
+	// coalesced datagram; every packet is copied out into a pooled buffer, and
+	// `pending` is the rest of the current coalesced datagram, handed out one
+	// `segSize` slice per ReadPacket call.
+	gro     bool
+	pending receivedPacket
+	segSize int
+
 	cap connCapabilities
 }
 
@@ -145,6 +153,7 @@ func newConn(c OOBCapablePacketConn, supportsDF bool) (*oobConn, error) {
 		batchConn:            bc,
 		messages:             msgs,
 		readPos:              batchSize,
+		gro:                  enableGRO(rawConn),
 		cap: connCapabilities{
 			DF:  supportsDF,
 			GSO: isGSOEnabled(rawConn),
@@ -154,16 +163,26 @@ func newConn(c OOBCapablePacketConn, supportsDF bool) (*oobConn, error) {
 	for i := 0; i < batchSize; i++ {
 		oobConn.messages[i].OOB = make([]byte, oobBufferSize)
 	}
+	if oobConn.gro {
+		for i := 0; i < batchSize; i++ {
+			oobConn.buffers[i] = getLargePacketBuffer()
+			oobConn.messages[i].Buffers[0] = oobConn.buffers[i].Data[:protocol.MaxLargePacketBufferSize]
+		}
+		utils.DefaultLogger.Debugf("Activating UDP GRO.")
+	}
 	return oobConn, nil
 }
 
 var invalidCmsgOnceV4, invalidCmsgOnceV6 sync.Once
 
 func (c *oobConn) ReadPacket() (receivedPacket, error) {
+	if len(c.pending.data) > 0 {
+		return c.popSegment(), nil
+	}
 	if len(c.messages) == int(c.readPos) { // all messages read. Read the next batch of messages.
 		c.messages = c.messages[:batchSize]
 		// replace buffers data buffers up to the packet that has been consumed during the last ReadBatch call
-		for i := uint8(0); i < c.readPos; i++ {
+		for i := uint8(0); i < c.readPos && !c.gro; i++ {
 			buffer := getPacketBuffer()
 			buffer.Data = buffer.Data[:protocol.MaxPacketBufferSize]
 			c.buffers[i] = buffer
@@ -189,10 +208,16 @@ func (c *oobConn) ReadPacket() (receivedPacket, error) {
 		data:       msg.Buffers[0][:msg.N],
 		buffer:     buffer,
 	}
+	segSize := msg.N
 	for len(data) > 0 {
 		hdr, body, remainder, err := unix.ParseOneSocketControlMessage(data)
 		if err != nil {
 			return receivedPacket{}, err
+		}
+		if hdr.Level == unix.IPPROTO_UDP && hdr.Type == msgTypeUDPGRO {
+			if size, ok := parseUDPGROSize(body); ok && size > 0 {
+				segSize = size
+			}
 		}
 		if hdr.Level == unix.IPPROTO_IP {
 			switch hdr.Type {
@@ -240,7 +265,28 @@ func (c *oobConn) ReadPacket() (receivedPacket, error) {
 		}
 		data = remainder
 	}
-	return p, nil
+	if !c.gro {
+		return p, nil
+	}
+	p.buffer = nil
+	c.pending = p
+	c.segSize = segSize
+	return c.popSegment(), nil
+}
+
+// popSegment copies the next segment of the pending coalesced datagram into a
+// pooled buffer; the persistent read slab is reused by the next ReadBatch.
+func (c *oobConn) popSegment() receivedPacket {
+	n := min(c.segSize, len(c.pending.data), protocol.MaxPacketBufferSize)
+	buffer := getPacketBuffer()
+	buffer.Data = buffer.Data[:n]
+	copy(buffer.Data, c.pending.data)
+
+	p := c.pending
+	p.data = buffer.Data
+	p.buffer = buffer
+	c.pending.data = c.pending.data[min(c.segSize, len(c.pending.data)):]
+	return p
 }
 
 // WritePacket writes a new packet.

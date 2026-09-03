@@ -29,7 +29,7 @@ type sendQueue struct {
 	available   chan struct{}
 	// inlineDisabled keeps every write on the goroutine (tests, or a conn that must not block the run loop).
 	inlineDisabled bool
-	conn        sendConn
+	conn           sendConn
 }
 
 var _ sender = &sendQueue{}
