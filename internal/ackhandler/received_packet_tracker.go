@@ -76,8 +76,9 @@ func (h *receivedPacketTracker) IsPotentiallyDuplicate(pn protocol.PacketNumber)
 }
 
 // number of ack-eliciting packets received before sending an ACK
-// packetsBeforeAck is a var so the tests written for the upstream value of 2 can keep it.
-var packetsBeforeAck = 20
+// defaultPacketsBeforeAck is the RFC 9000 recommendation; a bulk receiver may
+// raise it through quic.Config.AckThreshold to cut ACK traffic and sender wakeups.
+const defaultPacketsBeforeAck = 2
 
 // The appDataReceivedPacketTracker tracks packets received in the Application Data packet number space.
 // It waits until at least 2 packets were received before queueing an ACK, or until the max_ack_delay was reached.
@@ -93,15 +94,20 @@ type appDataReceivedPacketTracker struct {
 	ackQueued   bool // true if we need send a new ACK
 
 	ackElicitingPacketsReceivedSinceLastAck int
+	packetsBeforeAck                        int
 	ackAlarm                                monotime.Time
 
 	logger utils.Logger
 }
 
-func newAppDataReceivedPacketTracker(logger utils.Logger) *appDataReceivedPacketTracker {
+func newAppDataReceivedPacketTracker(logger utils.Logger, packetsBeforeAck int) *appDataReceivedPacketTracker {
+	if packetsBeforeAck <= 0 {
+		packetsBeforeAck = defaultPacketsBeforeAck
+	}
 	h := &appDataReceivedPacketTracker{
 		receivedPacketTracker: *newReceivedPacketTracker(),
 		maxAckDelay:           protocol.MaxAckDelay,
+		packetsBeforeAck:      packetsBeforeAck,
 		logger:                logger,
 	}
 	return h
@@ -185,9 +191,9 @@ func (h *appDataReceivedPacketTracker) shouldQueueACK(pn protocol.PacketNumber, 
 	}
 
 	// send an ACK every 2 ack-eliciting packets
-	if h.ackElicitingPacketsReceivedSinceLastAck >= packetsBeforeAck {
+	if h.ackElicitingPacketsReceivedSinceLastAck >= h.packetsBeforeAck {
 		if h.logger.Debug() {
-			h.logger.Debugf("\tQueueing ACK because packet %d packets were received after the last ACK (using initial threshold: %d).", h.ackElicitingPacketsReceivedSinceLastAck, packetsBeforeAck)
+			h.logger.Debugf("\tQueueing ACK because packet %d packets were received after the last ACK (using initial threshold: %d).", h.ackElicitingPacketsReceivedSinceLastAck, h.packetsBeforeAck)
 		}
 		return true
 	}

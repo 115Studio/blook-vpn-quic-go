@@ -163,6 +163,10 @@ type Config struct {
 	// If set too high, the path might not support packets of that size, leading to a timeout of the QUIC handshake.
 	// Values below 1200 are invalid.
 	InitialPacketSize uint16
+	// AckThreshold is the number of ack-eliciting packets received before an ACK
+	// is queued (RFC 9000 recommends 2, the default). A bulk receiver can raise
+	// it (10-20) to send fewer ACKs; the max_ack_delay timer still bounds latency.
+	AckThreshold int
 	// DisablePathMTUDiscovery disables Path MTU Discovery (RFC 8899).
 	// This allows the sending of QUIC packets that fully utilize the available MTU of the path.
 	// Path MTU discovery is only available on systems that allow setting of the Don't Fragment (DF) bit.

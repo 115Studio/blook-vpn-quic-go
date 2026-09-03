@@ -17,11 +17,11 @@ type ReceivedPacketHandler struct {
 	lowest1RTTPacket protocol.PacketNumber
 }
 
-func NewReceivedPacketHandler(logger utils.Logger) *ReceivedPacketHandler {
+func NewReceivedPacketHandler(logger utils.Logger, packetsBeforeAck int) *ReceivedPacketHandler {
 	return &ReceivedPacketHandler{
 		initialPackets:   newReceivedPacketTracker(),
 		handshakePackets: newReceivedPacketTracker(),
-		appDataPackets:   *newAppDataReceivedPacketTracker(logger),
+		appDataPackets:   *newAppDataReceivedPacketTracker(logger, packetsBeforeAck),
 		lowest1RTTPacket: protocol.InvalidPacketNumber,
 	}
 }
