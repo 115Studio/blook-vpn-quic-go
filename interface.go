@@ -167,6 +167,12 @@ type Config struct {
 	// is queued (RFC 9000 recommends 2, the default). A bulk receiver can raise
 	// it (10-20) to send fewer ACKs; the max_ack_delay timer still bounds latency.
 	AckThreshold int
+	// InitialDestinationConnectionID, if set, picks the destination connection ID of a client's
+	// first Initial in place of quic-go's random one, so an application can carry something in
+	// it (an admission token a front reads before routing the flow). The ID must be 8 to 20
+	// bytes and unpredictable (RFC 9000 §7.2); to look like a stock client it should also keep
+	// quic-go's spread, a uniformly random length in 8..20. Only valid for the client.
+	InitialDestinationConnectionID func() (ConnectionID, error)
 	// DisablePathMTUDiscovery disables Path MTU Discovery (RFC 8899).
 	// This allows the sending of QUIC packets that fully utilize the available MTU of the path.
 	// Path MTU discovery is only available on systems that allow setting of the Don't Fragment (DF) bit.

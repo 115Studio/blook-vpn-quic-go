@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"net"
 
 	"github.com/apernet/quic-go/internal/protocol"
@@ -11,6 +12,22 @@ import (
 
 // make it possible to mock connection ID for initial generation in the tests
 var generateConnectionIDForInitial = protocol.GenerateConnectionIDForInitial
+
+// initialDestConnID is the destination connection ID of a client's first Initial: the
+// application's when Config.InitialDestinationConnectionID is set, else a random one.
+func initialDestConnID(conf *Config) (protocol.ConnectionID, error) {
+	if conf.InitialDestinationConnectionID == nil {
+		return generateConnectionIDForInitial()
+	}
+	id, err := conf.InitialDestinationConnectionID()
+	if err != nil {
+		return protocol.ConnectionID{}, err
+	}
+	if id.Len() < protocol.MinConnectionIDLenInitial || id.Len() > protocol.MaxConnIDLen {
+		return protocol.ConnectionID{}, fmt.Errorf("quic: initial destination connection ID is %d bytes, want %d..%d", id.Len(), protocol.MinConnectionIDLenInitial, protocol.MaxConnIDLen)
+	}
+	return id, nil
+}
 
 // DialAddr establishes a new QUIC connection to a server.
 // It resolves the address, and then creates a new UDP connection to dial the QUIC server.

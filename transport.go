@@ -281,7 +281,7 @@ func (t *Transport) doDial(
 	if err != nil {
 		return nil, err
 	}
-	destConnID, err := generateConnectionIDForInitial()
+	destConnID, err := initialDestConnID(config)
 	if err != nil {
 		return nil, err
 	}
