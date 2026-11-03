@@ -294,6 +294,32 @@ func (h *connIDManager) RetireConnIDForPath(pathID pathID) {
 	delete(h.pathProbing, pathID)
 }
 
+// SwitchToPath makes the connection ID allocated to a validated path the active one and
+// retires the one the connection used before. Without it every migration parks one of the
+// peer's IDs for good, and since the peer only issues a replacement for an ID that was
+// retired, a client runs out after a couple of moves: the next probe has no ID to go out
+// with and never leaves.
+func (h *connIDManager) SwitchToPath(id pathID) {
+	h.assertNotClosed()
+
+	entry, ok := h.pathProbing[id]
+	if !ok {
+		return
+	}
+	delete(h.pathProbing, id)
+
+	h.queueControlFrame(&wire.RetireConnectionIDFrame{SequenceNumber: h.activeSequenceNumber})
+	h.highestRetired = max(h.highestRetired, h.activeSequenceNumber)
+	if h.activeStatelessResetToken != nil {
+		h.removeStatelessResetToken(*h.activeStatelessResetToken)
+	}
+
+	h.activeSequenceNumber = entry.SequenceNumber
+	h.activeConnectionID = entry.ConnectionID
+	h.activeStatelessResetToken = &entry.StatelessResetToken
+	h.packetsSinceLastChange = 0
+}
+
 func (h *connIDManager) IsActiveStatelessResetToken(token protocol.StatelessResetToken) bool {
 	if h.activeStatelessResetToken != nil {
 		if *h.activeStatelessResetToken == token {

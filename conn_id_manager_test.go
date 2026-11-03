@@ -430,3 +430,30 @@ func benchmarkConnIDManager(b *testing.B, reordered bool) {
 		}
 	}
 }
+
+func TestConnIDManagerSwitchToPathRetiresPreviousID(t *testing.T) {
+	var retired []uint64
+	m := newConnIDManager(
+		protocol.ParseConnectionID([]byte{1, 2, 3, 4}),
+		func(protocol.StatelessResetToken) {},
+		func(protocol.StatelessResetToken) {},
+		func(f wire.Frame) {
+			if r, ok := f.(*wire.RetireConnectionIDFrame); ok {
+				retired = append(retired, r.SequenceNumber)
+			}
+		},
+	)
+	require.NoError(t, m.Add(&wire.NewConnectionIDFrame{SequenceNumber: 1, ConnectionID: protocol.ParseConnectionID([]byte{5, 6, 7, 8})}))
+
+	probing, ok := m.GetConnIDForPath(7)
+	require.True(t, ok)
+
+	m.SwitchToPath(7)
+
+	require.Equal(t, probing, m.Get())
+	require.Equal(t, []uint64{0}, retired)
+
+	// the path's ID is the active one now, not a probing one to retire again
+	m.RetireConnIDForPath(7)
+	require.Equal(t, []uint64{0}, retired)
+}

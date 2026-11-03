@@ -291,16 +291,16 @@ func (pm *pathManagerOutgoing) HandlePathResponseFrame(f *wire.PathResponseFrame
 	}
 }
 
-func (pm *pathManagerOutgoing) ShouldSwitchPath() (*Transport, bool) {
+func (pm *pathManagerOutgoing) ShouldSwitchPath() (*Transport, pathID, bool) {
 	pm.mx.Lock()
 	defer pm.mx.Unlock()
 
 	if pm.pathToSwitchTo == nil {
-		return nil, false
+		return nil, 0, false
 	}
 	p := pm.pathToSwitchTo
 	pm.pathToSwitchTo = nil
-	return p.tr, true
+	return p.tr, pm.activePath, true
 }
 
 type pathManagerOutgoingAckHandler pathManagerOutgoing

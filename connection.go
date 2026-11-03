@@ -712,8 +712,9 @@ runLoop:
 		if c.perspective == protocol.PerspectiveClient {
 			pm := c.pathManagerOutgoing.Load()
 			if pm != nil {
-				tr, ok := pm.ShouldSwitchPath()
+				tr, id, ok := pm.ShouldSwitchPath()
 				if ok {
+					c.connIDManager.SwitchToPath(id)
 					c.switchToNewPath(tr, now)
 				}
 			}
@@ -1302,7 +1303,9 @@ func (c *Conn) handleShortHeaderPacket(
 	if !shouldSwitchPath || pn != c.largestRcvdAppData {
 		return true, nil
 	}
-	c.pathManager.SwitchToPath(p.remoteAddr)
+	if id := c.pathManager.SwitchToPath(p.remoteAddr); id != invalidPathID {
+		c.connIDManager.SwitchToPath(id)
+	}
 	c.sentPacketHandler.MigratedPath(p.rcvTime, protocol.ByteCount(c.config.InitialPacketSize))
 	maxPacketSize := protocol.ByteCount(protocol.MaxPacketBufferSize)
 	if c.peerParams.MaxUDPPayloadSize > 0 && c.peerParams.MaxUDPPayloadSize < maxPacketSize {
