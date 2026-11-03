@@ -95,8 +95,11 @@ type sentPacketHandler struct {
 
 	congestion      congestion.SendAlgorithmWithDebugInfos
 	congestionMutex sync.RWMutex
-	rttStats        *utils.RTTStats
-	connStats       *utils.ConnectionStats
+	// customCongestion is set once the application installs its own controller
+	// (SetCongestionControl); a path migration keeps it instead of starting Reno.
+	customCongestion bool
+	rttStats         *utils.RTTStats
+	connStats        *utils.ConnectionStats
 
 	// The number of times a PTO has been sent without receiving an ack.
 	ptoCount uint32
@@ -1167,14 +1170,21 @@ func (h *sentPacketHandler) MigratedPath(now monotime.Time, initialMaxDatagramSi
 	for pn := range h.appDataPackets.history.PathProbes() {
 		h.appDataPackets.history.RemovePathProbe(pn)
 	}
-	h.congestion = congestion.NewCubicSender(
-		congestion.DefaultClock{},
-		h.rttStats,
-		h.connStats,
-		initialMaxDatagramSize,
-		true, // use Reno
-		h.qlogger,
-	)
+	// A controller the application installed (BBR, Brutal) stays on the new path. Swapping
+	// it for Reno left a migrated connection at a fraction of its speed for good: Reno never
+	// fills a lossy wireless path, and nothing puts the application's controller back.
+	h.congestionMutex.Lock()
+	if !h.customCongestion {
+		h.congestion = congestion.NewCubicSender(
+			congestion.DefaultClock{},
+			h.rttStats,
+			h.connStats,
+			initialMaxDatagramSize,
+			true, // use Reno
+			h.qlogger,
+		)
+	}
+	h.congestionMutex.Unlock()
 	h.setLossDetectionTimer(now)
 }
 
@@ -1193,5 +1203,6 @@ func (h *sentPacketHandler) SetCongestionControl(cc congestionExt.CongestionCont
 	} else {
 		h.congestion = &ccAdapter{cc}
 	}
+	h.customCongestion = true
 	h.congestionMutex.Unlock()
 }
