@@ -11,7 +11,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type fakeCongestionControl struct{ congestionExt.CongestionControl }
+type fakeCongestionControl struct {
+	congestionExt.CongestionControl
+}
 
 func (fakeCongestionControl) SetRTTStatsProvider(congestionExt.RTTStatsProvider) {}
 
