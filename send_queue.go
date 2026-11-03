@@ -3,6 +3,8 @@ package quic
 import (
 	"errors"
 	"net"
+	"sync/atomic"
+	"time"
 
 	"github.com/apernet/quic-go/internal/protocol"
 )
@@ -30,6 +32,11 @@ type sendQueue struct {
 	// inlineDisabled keeps every write on the goroutine (tests, or a conn that must not block the run loop).
 	inlineDisabled bool
 	conn           sendConn
+	// pathDownSince is when sends began failing because the network went away; zero
+	// while they succeed. See pathDownGrace.
+	pathDownSince time.Time
+	// closing is set by Close before Run notices it: Run may still be flushing the queue.
+	closing atomic.Bool
 }
 
 var _ sender = &sendQueue{}
@@ -76,6 +83,16 @@ func (h *sendQueue) Send(p *packetBuffer, gsoSize uint16, ecn protocol.ECN) {
 	}
 }
 
+func (h *sendQueue) withinPathDownGrace(err error) bool {
+	if !isPathDownErr(err) {
+		return false
+	}
+	if h.pathDownSince.IsZero() {
+		h.pathDownSince = time.Now()
+	}
+	return time.Since(h.pathDownSince) < pathDownGrace
+}
+
 func (h *sendQueue) SendProbe(p *packetBuffer, addr net.Addr) {
 	h.conn.WriteTo(p.Data, addr)
 }
@@ -107,9 +124,13 @@ func (h *sendQueue) Run() error {
 				// 2. Path MTU discovery,and
 				// 3. Eventual detection of loss PingFrame.
 				var tooLarge *DatagramTooLargeError
-				if !isSendMsgSizeErr(err) && !errors.As(err, &tooLarge) {
+				// A queue being closed belongs to a path the connection has left: what it
+				// fails to flush onto that path no longer matters.
+				if !isSendMsgSizeErr(err) && !errors.As(err, &tooLarge) && !h.closing.Load() && !h.withinPathDownGrace(err) {
 					return err
 				}
+			} else {
+				h.pathDownSince = time.Time{}
 			}
 			e.buf.Release()
 			select {
@@ -121,6 +142,7 @@ func (h *sendQueue) Run() error {
 }
 
 func (h *sendQueue) Close() {
+	h.closing.Store(true)
 	close(h.closeCalled)
 	// wait until the run loop returned
 	<-h.runStopped

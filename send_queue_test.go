@@ -199,3 +199,20 @@ func TestSendQueueSendProbe(t *testing.T) {
 	c.EXPECT().WriteTo([]byte("foobar"), addr)
 	q.SendProbe(getPacketWithContents([]byte("foobar")), addr)
 }
+
+func TestSendQueueClosingIgnoresWriteErrors(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		mockCtrl := gomock.NewController(t)
+		c := NewMockSendConn(mockCtrl)
+		q := newSendQueue(c)
+
+		c.EXPECT().Write(gomock.Any(), gomock.Any(), gomock.Any()).Return(assert.AnError).Times(2)
+		q.Send(getPacketWithContents([]byte("foobar")), 6, protocol.ECNNon)
+
+		errChan := make(chan error, 1)
+		go func() { errChan <- q.Run() }()
+		q.Close()
+
+		require.NoError(t, <-errChan)
+	})
+}
