@@ -158,6 +158,9 @@ type Transport struct {
 	listening   chan struct{} // is closed when listen returns
 	closeErr    error
 	createdConn bool
+	// retired is set by Retire: the socket was closed on purpose and the read error that
+	// follows must not end the transport's connections.
+	retired     atomic.Bool
 	isSingleUse bool // was created for a single server or client, i.e. by calling quic.Listen or quic.Dial
 
 	readingNonQUICPackets atomic.Bool
@@ -450,6 +453,19 @@ func (t *Transport) runSendQueue() {
 	}
 }
 
+// Retire closes the socket of a transport whose connections have all moved to paths on other
+// transports (Conn.AddPath, Path.Switch), and leaves those connections running. Close would
+// destroy every connection the transport ever carried, the moved ones included, and keeping
+// the socket open keeps the device's old network in use. Packets that still arrive on the
+// socket are lost; a connection that has not switched away must not be on it.
+func (t *Transport) Retire() error {
+	if err := t.init(false); err != nil {
+		return err
+	}
+	t.retired.Store(true)
+	return t.Conn.Close()
+}
+
 // Close stops listening for UDP datagrams on the Transport.Conn.
 // It abruptly terminates all existing connections, without sending a CONNECTION_CLOSE
 // to the peers. It is the application's responsibility to cleanly terminate existing
@@ -546,6 +562,9 @@ func (t *Transport) listen(conn rawConn) {
 			// Windows returns an error when receiving a UDP datagram that doesn't fit into the provided buffer.
 			if isRecvMsgSizeErr(err) {
 				continue
+			}
+			if t.retired.Load() {
+				return
 			}
 			t.close(err)
 			return
