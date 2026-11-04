@@ -104,6 +104,39 @@ func testConnIDGeneratorIssueAndRetire(t *testing.T, hasInitialClientDestConnID 
 	require.Empty(t, removed)
 }
 
+// A peer at the default active_connection_id_limit of 2 holds the handshake ID and one
+// spare. When it retires the handshake ID it must get a replacement, or it has no spare
+// left to migrate with.
+func TestConnIDGeneratorReplacesHandshakeConnID(t *testing.T) {
+	var queuedFrames []wire.Frame
+	g := newConnIDGenerator(
+		&packetHandlerMap{},
+		protocol.ParseConnectionID([]byte{1, 1, 1, 1}),
+		nil,
+		newStatelessResetter(&StatelessResetKey{1, 2, 3, 4}),
+		connRunnerCallbacks{
+			AddConnectionID:    func(protocol.ConnectionID) {},
+			RemoveConnectionID: func(protocol.ConnectionID) {},
+			ReplaceWithClosed:  func([]protocol.ConnectionID, []byte, time.Duration) {},
+		},
+		func(f wire.Frame) { queuedFrames = append(queuedFrames, f) },
+		&protocol.DefaultConnectionIDGenerator{ConnLen: 5},
+	)
+
+	require.NoError(t, g.SetMaxActiveConnIDs(protocol.DefaultActiveConnectionIDLimit))
+	require.Len(t, queuedFrames, 1)
+	queuedFrames = queuedFrames[:0]
+
+	require.NoError(t, g.Retire(0, protocol.ParseConnectionID([]byte{3, 3, 3, 3}), monotime.Now()))
+	require.Len(t, queuedFrames, 1)
+	require.EqualValues(t, 2, queuedFrames[0].(*wire.NewConnectionIDFrame).SequenceNumber)
+	queuedFrames = queuedFrames[:0]
+
+	// a duplicate retirement must not push the peer past its limit
+	require.NoError(t, g.Retire(0, protocol.ParseConnectionID([]byte{3, 3, 3, 3}), monotime.Now()))
+	require.Empty(t, queuedFrames)
+}
+
 func TestConnIDGeneratorRetiring(t *testing.T) {
 	initialConnID := protocol.ParseConnectionID([]byte{2, 2, 2, 2})
 	var added, removed []protocol.ConnectionID

@@ -55,6 +55,10 @@ type connIDGenerator struct {
 	statelessResetter *statelessResetter
 
 	queueControlFrame func(wire.Frame)
+
+	// maxActive is how many of our connection IDs the peer stores, the handshake one
+	// included; zero until its transport parameters arrive.
+	maxActive uint64
 }
 
 func newConnIDGenerator(
@@ -88,7 +92,8 @@ func (m *connIDGenerator) SetMaxActiveConnIDs(limit uint64) error {
 	// transport parameter.
 	// We currently don't send the preferred_address transport parameter,
 	// so we can issue (limit - 1) connection IDs.
-	for i := uint64(len(m.activeSrcConnIDs)); i < min(limit, protocol.MaxIssuedConnectionIDs); i++ {
+	m.maxActive = min(limit, protocol.MaxIssuedConnectionIDs)
+	for i := uint64(len(m.activeSrcConnIDs)); i < m.maxActive; i++ {
 		if err := m.issueNewConnID(); err != nil {
 			return err
 		}
@@ -117,8 +122,10 @@ func (m *connIDGenerator) Retire(seq uint64, sentWithDestConnID protocol.Connect
 	m.queueConnIDForRetiring(connID, expiry)
 
 	delete(m.activeSrcConnIDs, seq)
-	// Don't issue a replacement for the initial connection ID.
-	if seq == 0 {
+	// The handshake connection ID gets a replacement too. The limit counts it, so
+	// without one a peer at the default limit of 2 (Chrome sends none) is left with no
+	// spare ID once it rotates off the handshake one, and can never migrate.
+	if uint64(len(m.activeSrcConnIDs)) >= m.maxActive {
 		return nil
 	}
 	return m.issueNewConnID()
