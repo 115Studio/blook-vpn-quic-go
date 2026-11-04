@@ -18,7 +18,7 @@ import (
 const alpn = "fuzz"
 
 func main() {
-	client := handshake.NewCryptoSetupClient(
+	client, err := handshake.NewCryptoSetupClient(
 		protocol.ConnectionID{},
 		&wire.TransportParameters{ActiveConnectionIDLimit: 2},
 		&tls.Config{
@@ -29,11 +29,15 @@ func main() {
 			ClientSessionCache: tls.NewLRUClientSessionCache(1),
 		},
 		false,
+		false,
 		&utils.RTTStats{},
 		nil,
 		utils.DefaultLogger.WithPrefix("client"),
 		protocol.Version1,
 	)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	config := testdata.GetTLSConfig()
 	config.NextProtos = []string{alpn}

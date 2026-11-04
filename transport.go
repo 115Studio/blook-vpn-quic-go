@@ -256,11 +256,16 @@ func (t *Transport) dial(ctx context.Context, addr net.Addr, host string, tlsCon
 	conf = populateConfig(conf)
 	tlsConf = tlsConf.Clone()
 	// setTLSConfigServerName(tlsConf, addr, host)
+	// The first Initial packet is numbered 1, not 0.
+	var initialPacketNumber protocol.PacketNumber
+	if conf.ChromeParrot {
+		initialPacketNumber = 1
+	}
 	return t.doDial(ctx,
 		newSendConn(t.conn, addr, packetInfo{}, utils.DefaultLogger),
 		tlsConf,
 		conf,
-		0,
+		initialPacketNumber,
 		false,
 		use0RTT,
 		conf.Versions[0],
@@ -300,7 +305,7 @@ func (t *Transport) doDial(
 	logger := utils.DefaultLogger.WithPrefix("client")
 	logger.Infof("Starting new connection to %s (%s -> %s), source connection ID %s, destination connection ID %s, version %s", tlsConf.ServerName, sendConn.LocalAddr(), sendConn.RemoteAddr(), srcConnID, destConnID, version)
 
-	conn := newClientConnection(
+	conn, err := newClientConnection(
 		context.WithoutCancel(ctx),
 		sendConn,
 		(*packetHandlerMap)(t),
@@ -317,6 +322,10 @@ func (t *Transport) doDial(
 		logger,
 		version,
 	)
+	if err != nil {
+		t.mutex.Unlock()
+		return nil, err
+	}
 	t.handlers[srcConnID] = conn
 	t.mutex.Unlock()
 

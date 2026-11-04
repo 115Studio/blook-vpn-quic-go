@@ -104,6 +104,22 @@ func populateConfig(config *Config) *Config {
 	if initialPacketSize == 0 {
 		initialPacketSize = protocol.InitialPacketSize
 	}
+	enableDatagrams := config.EnableDatagrams
+	if config.ChromeParrot {
+		// Chrome always advertises DATAGRAM support; leaving the transport parameter
+		// out would be one parameter short of Chrome's set.
+		enableDatagrams = true
+		// Chrome pins these, so anything the caller asked for is overridden.
+		idleTimeout = chromeMaxIdleTimeout
+		initialStreamReceiveWindow = chromeInitialMaxStreamData
+		initialConnectionReceiveWindow = chromeInitialMaxData
+		maxIncomingStreams = chromeMaxIncomingStreams
+		maxIncomingUniStreams = chromeMaxIncomingUniStreams
+		initialPacketSize = chromeInitialPacketSize
+		// The auto-tuning ceilings must not sit below the starting windows.
+		maxStreamReceiveWindow = max(maxStreamReceiveWindow, initialStreamReceiveWindow)
+		maxConnectionReceiveWindow = max(maxConnectionReceiveWindow, initialConnectionReceiveWindow)
+	}
 
 	return &Config{
 		GetConfigForClient:               config.GetConfigForClient,
@@ -119,7 +135,7 @@ func populateConfig(config *Config) *Config {
 		MaxIncomingStreams:               maxIncomingStreams,
 		MaxIncomingUniStreams:            maxIncomingUniStreams,
 		TokenStore:                       config.TokenStore,
-		EnableDatagrams:                  config.EnableDatagrams,
+		EnableDatagrams:                  enableDatagrams,
 		InitialPacketSize:                initialPacketSize,
 		DisablePathMTUDiscovery:          config.DisablePathMTUDiscovery,
 		AckThreshold:                     config.AckThreshold,
@@ -129,5 +145,6 @@ func populateConfig(config *Config) *Config {
 		Tracer:                           config.Tracer,
 		MaxDatagramFrameSize:             config.MaxDatagramFrameSize,
 		DisablePathManager:               config.DisablePathManager,
+		ChromeParrot:                     config.ChromeParrot,
 	}
 }

@@ -35,10 +35,16 @@ type testPacketPacker struct {
 	retransmissionQueue *retransmissionQueue
 }
 
-func newTestPacketPacker(t *testing.T, mockCtrl *gomock.Controller, pers protocol.Perspective) *testPacketPacker {
+// chaosProtection is optional so existing callers stay unchanged; only the
+// Chrome chaos protection tests pass it.
+func newTestPacketPacker(t *testing.T, mockCtrl *gomock.Controller, pers protocol.Perspective, chaosProtection ...bool) *testPacketPacker {
+	var chaos bool
+	if len(chaosProtection) > 0 {
+		chaos = chaosProtection[0]
+	}
 	destConnID := protocol.ParseConnectionID([]byte{1, 2, 3, 4})
 	require.Equal(t, testPackerConnIDLen, destConnID.Len())
-	initialStream := newInitialCryptoStream(pers == protocol.PerspectiveClient)
+	initialStream := newInitialCryptoStream(pers == protocol.PerspectiveClient, chaos)
 	handshakeStream := newCryptoStream()
 	pnManager := mockackhandler.NewMockSentPacketHandler(mockCtrl)
 	framer := NewMockFrameSource(mockCtrl)
@@ -67,6 +73,7 @@ func newTestPacketPacker(t *testing.T, mockCtrl *gomock.Controller, pers protoco
 			ackFramer,
 			datagramQueue,
 			pers,
+			chaos,
 		),
 	}
 }

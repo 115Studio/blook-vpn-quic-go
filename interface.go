@@ -171,7 +171,8 @@ type Config struct {
 	// first Initial in place of quic-go's random one, so an application can carry something in
 	// it (an admission token a front reads before routing the flow). The ID must be 8 to 20
 	// bytes and unpredictable (RFC 9000 §7.2); to look like a stock client it should also keep
-	// quic-go's spread, a uniformly random length in 8..20. Only valid for the client.
+	// quic-go's spread, a uniformly random length in 8..20, or Chrome's fixed 8 bytes under
+	// ChromeParrot. Only valid for the client.
 	InitialDestinationConnectionID func() (ConnectionID, error)
 	// DisablePathMTUDiscovery disables Path MTU Discovery (RFC 8899).
 	// This allows the sending of QUIC packets that fully utilize the available MTU of the path.
@@ -193,6 +194,16 @@ type Config struct {
 	// DisablePathManager disables path manager.
 	// for hysteria2 port hopping, direct change remote address without connection migration logic
 	DisablePathManager bool
+
+	// ChromeParrot makes the client's QUIC handshake look like Google Chrome's.
+	// It overrides the flow control windows, stream limits, idle timeout and
+	// packet size with Chrome's values, encodes the transport parameters the way
+	// Chrome does (see wire.marshalChrome), and applies Chrome's chaos
+	// protection to the Initial packets.
+	//
+	// Client side only; it has no effect on a listener. Because it pins the
+	// values above, settings that conflict with Chrome's are ignored.
+	ChromeParrot bool
 }
 
 // ClientInfo contains information about an incoming connection attempt.

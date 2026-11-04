@@ -14,9 +14,13 @@ import (
 var generateConnectionIDForInitial = protocol.GenerateConnectionIDForInitial
 
 // initialDestConnID is the destination connection ID of a client's first Initial: the
-// application's when Config.InitialDestinationConnectionID is set, else a random one.
+// application's when Config.InitialDestinationConnectionID is set, else a random one —
+// Chrome's fixed 8 bytes under ChromeParrot, quic-go's random 8..20 otherwise.
 func initialDestConnID(conf *Config) (protocol.ConnectionID, error) {
 	if conf.InitialDestinationConnectionID == nil {
+		if conf.ChromeParrot {
+			return protocol.GenerateChromeConnectionIDForInitial()
+		}
 		return generateConnectionIDForInitial()
 	}
 	id, err := conf.InitialDestinationConnectionID()

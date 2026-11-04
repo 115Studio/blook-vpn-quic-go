@@ -27,6 +27,7 @@ func newMigrationTestHandler() *sentPacketHandler {
 		false,
 		nil,
 		protocol.PerspectiveClient,
+		false,
 		nil,
 		utils.DefaultLogger,
 	).(*sentPacketHandler)
