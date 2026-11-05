@@ -256,9 +256,9 @@ func (t *Transport) dial(ctx context.Context, addr net.Addr, host string, tlsCon
 	conf = populateConfig(conf)
 	tlsConf = tlsConf.Clone()
 	// setTLSConfigServerName(tlsConf, addr, host)
-	// The first Initial packet is numbered 1, not 0.
+	// Chrome numbers its first Initial packet 1, not 0; Safari starts at 0.
 	var initialPacketNumber protocol.PacketNumber
-	if conf.ChromeParrot {
+	if conf.Parrot == ParrotChrome {
 		initialPacketNumber = 1
 	}
 	return t.doDial(ctx,

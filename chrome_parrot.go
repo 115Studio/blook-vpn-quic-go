@@ -58,11 +58,12 @@ func (ZeroLengthConnectionIDGenerator) GenerateConnectionID() (ConnectionID, err
 
 func (ZeroLengthConnectionIDGenerator) ConnectionIDLen() int { return 0 }
 
-// chromeReceiveWindow resolves one receive window under the parrot from what the caller
-// set (zero when unset) and the defaults populateConfig already filled in.
-func chromeReceiveWindow(setStart, setMax, start, ceiling, chrome uint64) (uint64, uint64) {
+// parrotReceiveWindow resolves one receive window under a parrot from what the caller
+// set (zero when unset), the defaults populateConfig already filled in, and the
+// parroted client's own start window.
+func parrotReceiveWindow(setStart, setMax, start, ceiling, parroted uint64) (uint64, uint64) {
 	if setStart == 0 {
-		start = chrome
+		start = parroted
 		if setMax != 0 {
 			start = min(start, ceiling)
 		}

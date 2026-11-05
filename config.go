@@ -105,7 +105,24 @@ func populateConfig(config *Config) *Config {
 		initialPacketSize = protocol.InitialPacketSize
 	}
 	enableDatagrams := config.EnableDatagrams
-	if config.ChromeParrot {
+	parrot := config.Parrot
+	if parrot == ParrotNone && config.ChromeParrot {
+		parrot = ParrotChrome
+	}
+	switch parrot {
+	case ParrotSafari:
+		// Apple advertises no DATAGRAM support and no server-initiated bidi streams.
+		enableDatagrams = false
+		maxIncomingStreams = 0
+		maxIncomingUniStreams = safariMaxIncomingUniStreams
+		initialPacketSize = safariInitialPacketSize
+		initialStreamReceiveWindow, maxStreamReceiveWindow = parrotReceiveWindow(
+			config.InitialStreamReceiveWindow, config.MaxStreamReceiveWindow,
+			initialStreamReceiveWindow, maxStreamReceiveWindow, safariInitialMaxStreamData)
+		initialConnectionReceiveWindow, maxConnectionReceiveWindow = parrotReceiveWindow(
+			config.InitialConnectionReceiveWindow, config.MaxConnectionReceiveWindow,
+			initialConnectionReceiveWindow, maxConnectionReceiveWindow, safariInitialMaxData)
+	case ParrotChrome:
 		// Chrome always advertises DATAGRAM support; leaving the transport parameter
 		// out would be one parameter short of Chrome's set.
 		enableDatagrams = true
@@ -119,10 +136,10 @@ func populateConfig(config *Config) *Config {
 		// 50 MB), and it outranks matching Chrome's transport parameters: the
 		// windows the caller set stand, ceilings included, and a Chrome start
 		// window never rises above a ceiling the caller set.
-		initialStreamReceiveWindow, maxStreamReceiveWindow = chromeReceiveWindow(
+		initialStreamReceiveWindow, maxStreamReceiveWindow = parrotReceiveWindow(
 			config.InitialStreamReceiveWindow, config.MaxStreamReceiveWindow,
 			initialStreamReceiveWindow, maxStreamReceiveWindow, chromeInitialMaxStreamData)
-		initialConnectionReceiveWindow, maxConnectionReceiveWindow = chromeReceiveWindow(
+		initialConnectionReceiveWindow, maxConnectionReceiveWindow = parrotReceiveWindow(
 			config.InitialConnectionReceiveWindow, config.MaxConnectionReceiveWindow,
 			initialConnectionReceiveWindow, maxConnectionReceiveWindow, chromeInitialMaxData)
 	}
@@ -151,6 +168,7 @@ func populateConfig(config *Config) *Config {
 		Tracer:                           config.Tracer,
 		MaxDatagramFrameSize:             config.MaxDatagramFrameSize,
 		DisablePathManager:               config.DisablePathManager,
-		ChromeParrot:                     config.ChromeParrot,
+		ChromeParrot:                     parrot == ParrotChrome,
+		Parrot:                           parrot,
 	}
 }

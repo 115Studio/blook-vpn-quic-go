@@ -141,13 +141,13 @@ type initialCryptoStream struct {
 	cuts     [2]clientHelloCut
 }
 
-// chromeParrot disables quic-go's own ClientHello scrambling. That scheme cuts at
-// semantically chosen offsets, which is recognizably quic-go; the packet packer
-// applies chaos protection instead, and running both would produce a hybrid
-// matching neither.
-func newInitialCryptoStream(isClient, chromeParrot bool) *initialCryptoStream {
+// parrot disables quic-go's own ClientHello scrambling. That scheme cuts at
+// semantically chosen offsets, which is recognizably quic-go; under a parrot the
+// packet packer lays the ClientHello out the way the parroted client does, and
+// running both would produce a hybrid matching neither.
+func newInitialCryptoStream(isClient, parrot bool) *initialCryptoStream {
 	var scramble bool
-	if isClient && !chromeParrot {
+	if isClient && !parrot {
 		disabled, err := strconv.ParseBool(os.Getenv(disableClientHelloScramblingEnv))
 		scramble = err != nil || !disabled
 	}

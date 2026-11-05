@@ -124,6 +124,10 @@ type sentPacketHandler struct {
 
 	// shortPacketNumbers allows single-byte packet numbers, as Chrome uses.
 	shortPacketNumbers bool
+	// safariPacketNumbers sizes packet numbers by the unacknowledged range alone, as
+	// Safari does: its Initials both carry one-byte packet numbers where Chrome's
+	// congestion-window sizing gives the second one two.
+	safariPacketNumbers bool
 	// maxDatagramSize converts the congestion window into a packet count, which
 	// is what the packet number length depends on when shortPacketNumbers is set.
 	maxDatagramSize protocol.ByteCount
@@ -1031,6 +1035,9 @@ func (h *sentPacketHandler) PeekPacketNumber(encLevel protocol.EncryptionLevel) 
 	pnSpace := h.getPacketNumberSpace(encLevel)
 	pn := pnSpace.pns.Peek()
 	// See section 17.1 of RFC 9000.
+	if h.safariPacketNumbers {
+		return pn, protocol.PacketNumberLengthForHeaderChrome(pn, pnSpace.largestAcked, 0)
+	}
 	if h.shortPacketNumbers {
 		var cwndPackets protocol.PacketNumber
 		if size := h.packetNumberSizingUnit(); size > 0 {
@@ -1248,4 +1255,13 @@ func (h *sentPacketHandler) SetCongestionControl(cc congestionExt.CongestionCont
 	}
 	h.customCongestion = true
 	h.congestionMutex.Unlock()
+}
+
+// UseSafariPacketNumbers makes h size packet numbers the way Safari does; see
+// sentPacketHandler.safariPacketNumbers. It must be called before the first packet.
+func UseSafariPacketNumbers(h SentPacketHandler) {
+	if sph, ok := h.(*sentPacketHandler); ok {
+		sph.shortPacketNumbers = true
+		sph.safariPacketNumbers = true
+	}
 }

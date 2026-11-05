@@ -29,7 +29,7 @@ func main() {
 			ClientSessionCache: tls.NewLRUClientSessionCache(1),
 		},
 		false,
-		false,
+		protocol.ParrotNone,
 		&utils.RTTStats{},
 		nil,
 		utils.DefaultLogger.WithPrefix("client"),

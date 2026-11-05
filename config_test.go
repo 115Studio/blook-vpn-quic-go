@@ -251,6 +251,32 @@ func TestConfigChromeParrotKeepsCallerReceiveWindows(t *testing.T) {
 	require.EqualValues(t, chromeInitialMaxStreamData, c.InitialStreamReceiveWindow)
 }
 
+func TestConfigSafariParrot(t *testing.T) {
+	c := populateConfig(&Config{
+		Parrot:             ParrotSafari,
+		EnableDatagrams:    true,
+		MaxIncomingStreams: 7,
+		InitialPacketSize:  1350,
+	})
+	require.EqualValues(t, safariInitialMaxStreamData, c.InitialStreamReceiveWindow)
+	require.EqualValues(t, protocol.DefaultMaxReceiveStreamFlowControlWindow, c.MaxStreamReceiveWindow)
+	require.EqualValues(t, safariInitialMaxData, c.InitialConnectionReceiveWindow)
+	require.EqualValues(t, safariInitialMaxData, c.MaxConnectionReceiveWindow)
+	require.Zero(t, c.MaxIncomingStreams)
+	require.EqualValues(t, safariMaxIncomingUniStreams, c.MaxIncomingUniStreams)
+	require.EqualValues(t, safariInitialPacketSize, c.InitialPacketSize)
+	require.False(t, c.EnableDatagrams)
+	require.False(t, c.ChromeParrot)
+
+	// The caller's windows stand, as under the Chrome parrot.
+	c = populateConfig(&Config{Parrot: ParrotSafari, MaxConnectionReceiveWindow: 3 << 20})
+	require.EqualValues(t, 3<<20, c.InitialConnectionReceiveWindow)
+	require.EqualValues(t, 3<<20, c.MaxConnectionReceiveWindow)
+
+	// ChromeParrot alone still means Chrome.
+	require.Equal(t, ParrotChrome, populateConfig(&Config{ChromeParrot: true}).Parrot)
+}
+
 func TestConfigChromeParrotForcesDatagrams(t *testing.T) {
 	// Chrome always advertises max_datagram_frame_size, so ChromeParrot must turn
 	// datagrams on; otherwise the transport parameter set comes out one short of

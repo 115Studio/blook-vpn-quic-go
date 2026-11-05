@@ -196,15 +196,35 @@ type Config struct {
 	DisablePathManager bool
 
 	// ChromeParrot makes the client's QUIC handshake look like Google Chrome's.
-	// It overrides the flow control windows, stream limits, idle timeout and
-	// packet size with Chrome's values, encodes the transport parameters the way
-	// Chrome does (see wire.marshalChrome), and applies Chrome's chaos
-	// protection to the Initial packets.
+	// It overrides the stream limits, idle timeout and packet size with Chrome's
+	// values, encodes the transport parameters the way Chrome does (see
+	// wire.marshalChrome), and applies Chrome's chaos protection to the Initial
+	// packets. The receive windows are Chrome's unless the caller sets them.
 	//
 	// Client side only; it has no effect on a listener. Because it pins the
 	// values above, settings that conflict with Chrome's are ignored.
+	//
+	// It is the same as Parrot: ParrotChrome, which takes precedence when set.
 	ChromeParrot bool
+
+	// Parrot picks the client whose QUIC handshake this client imitates:
+	// ParrotChrome (see ChromeParrot) or ParrotSafari, Apple's QUIC stack as
+	// Safari on iOS 26.6.2 sends it: its ClientHello and transport parameters,
+	// 1200-byte Initials each carrying one CRYPTO frame of at most 999 bytes,
+	// and no datagrams or server-initiated bidirectional streams. Under either,
+	// the receive windows are the parroted client's unless the caller sets them.
+	// Client side only.
+	Parrot Parrot
 }
+
+// Parrot is the client whose QUIC handshake a client imitates; see Config.Parrot.
+type Parrot = protocol.Parrot
+
+const (
+	ParrotNone   = protocol.ParrotNone
+	ParrotChrome = protocol.ParrotChrome
+	ParrotSafari = protocol.ParrotSafari
+)
 
 // ClientInfo contains information about an incoming connection attempt.
 type ClientInfo struct {

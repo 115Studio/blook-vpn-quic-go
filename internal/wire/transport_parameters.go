@@ -94,6 +94,9 @@ type TransportParameters struct {
 	// ChromeFingerprint makes Marshal encode the parameters the way Google
 	// Chrome does. Client side only; see marshalChrome.
 	ChromeFingerprint bool
+	// SafariFingerprint makes Marshal encode the parameters the way Apple's QUIC
+	// stack does. Client side only; see marshalSafari.
+	SafariFingerprint bool
 }
 
 // Unmarshal the transport parameters
@@ -358,6 +361,9 @@ func (p *TransportParameters) readNumericTransportParameter(b []byte, paramID tr
 func (p *TransportParameters) Marshal(pers protocol.Perspective) []byte {
 	if p.ChromeFingerprint && pers == protocol.PerspectiveClient {
 		return p.marshalChrome()
+	}
+	if p.SafariFingerprint && pers == protocol.PerspectiveClient {
+		return p.marshalSafari()
 	}
 
 	// Typical Transport Parameters consume around 110 bytes, depending on the exact values,

@@ -8,6 +8,7 @@ import (
 
 	utls "github.com/refraction-networking/utls"
 
+	"github.com/apernet/quic-go/internal/protocol"
 	"github.com/apernet/quic-go/quicvarint"
 )
 
@@ -30,16 +31,19 @@ var _ tlsQUICConn = (*utlsQUICConn)(nil)
 // own SessionState with unexported internals, so a uTLS session cannot be
 // converted into the *tls.SessionState the resumption path expects. The events
 // are turned off at the source rather than half-supported.
-func newUTLSQUICClient(tlsConf *tls.Config) (*utlsQUICConn, error) {
+func newUTLSQUICClient(tlsConf *tls.Config, parrot protocol.Parrot) (*utlsQUICConn, error) {
 	uConf, err := utlsConfigFromStd(tlsConf)
 	if err != nil {
 		return nil, err
 	}
 	spec := chromeQUICClientHelloSpec(tlsConf.NextProtos)
+	if parrot == protocol.ParrotSafari {
+		spec = safariQUICClientHelloSpec(tlsConf.NextProtos)
+	}
 
 	conn := utls.UQUICClient(&utls.QUICConfig{TLSConfig: uConf}, utls.HelloCustom)
 	if err := conn.ApplyPreset(spec); err != nil {
-		return nil, fmt.Errorf("applying Chrome ClientHello spec: %w", err)
+		return nil, fmt.Errorf("applying parroted ClientHello spec: %w", err)
 	}
 	return &utlsQUICConn{conn: conn, spec: spec}, nil
 }

@@ -142,6 +142,9 @@ type packetPacker struct {
 	// chaosProtection applies Chrome's chaos protection to Initial packets.
 	// See appendChaosProtectedPayload.
 	chaosProtection bool
+	// safariInitials lays out the client's Initials the way Safari does: one CRYPTO
+	// frame of at most safariInitialCryptoLen bytes each.
+	safariInitials bool
 }
 
 const DatagramFrameMaxPeekTimes = 10
@@ -160,13 +163,14 @@ func newPacketPacker(
 	acks ackFrameSource,
 	datagramQueue *datagramQueue,
 	perspective protocol.Perspective,
-	chaosProtection bool,
+	parrot protocol.Parrot,
 ) *packetPacker {
 	var b [16]byte
 	_, _ = crand.Read(b[:])
 
 	return &packetPacker{
-		chaosProtection:     chaosProtection,
+		chaosProtection:     parrot == protocol.ParrotChrome,
+		safariInitials:      parrot == protocol.ParrotSafari && perspective == protocol.PerspectiveClient,
 		cryptoSetup:         cryptoSetup,
 		getDestConnID:       getDestConnID,
 		srcConnID:           srcConnID,
@@ -183,11 +187,11 @@ func newPacketPacker(
 }
 
 // noCoalescing reports whether the packet being packed has to go out in a
-// datagram of its own. The imitated client never coalesces: every datagram it
+// datagram of its own. Neither imitated client coalesces: every datagram it
 // sends carries exactly one encryption level, so its Initial ACK travels alone,
 // padded, and the Handshake flight follows in the next datagram.
 func (p *packetPacker) noCoalescing() bool {
-	return p.chaosProtection && p.perspective == protocol.PerspectiveClient
+	return (p.chaosProtection || p.safariInitials) && p.perspective == protocol.PerspectiveClient
 }
 
 // splitAckFromCrypto reports whether an ACK should be sent without the CRYPTO
@@ -645,6 +649,18 @@ func (p *packetPacker) maybeGetCryptoPacket(
 				return hdr, pl
 			}
 		}
+		if p.safariInitials && encLevel == protocol.EncryptionInitial {
+			// One CRYPTO frame of at most safariInitialCryptoLen bytes; the rest of
+			// the datagram is padding.
+			if hasCryptoData() {
+				limit := cryptoFrameHeaderLen(cryptoWriteOffset(), safariInitialCryptoLen) + safariInitialCryptoLen
+				if cf := popCryptoFrame(min(maxPacketSize, limit)); cf != nil {
+					pl.frames = append(pl.frames, ackhandler.Frame{Frame: cf, Handler: handler})
+					pl.length += cf.Length(v)
+				}
+			}
+			return hdr, pl
+		}
 		for hasCryptoData() {
 			cf := popCryptoFrame(maxPacketSize)
 			if cf == nil {
@@ -975,6 +991,10 @@ func (p *packetPacker) appendLongHeaderPacket(buffer *packetBuffer, header *wire
 
 	if p.chaosProtection && encLevel == protocol.EncryptionInitial && worthChaosProtecting(pl, paddingLen) {
 		raw, err = p.appendChaosProtectedPayload(raw, pl, paddingLen, v)
+	} else if p.safariInitials && encLevel == protocol.EncryptionInitial {
+		// Safari pads after its frames, where quic-go pads before them.
+		raw, err = p.appendPacketPayload(raw, pl, 0, v)
+		raw = append(raw, make([]byte, paddingLen)...)
 	} else {
 		raw, err = p.appendPacketPayload(raw, pl, paddingLen, v)
 	}

@@ -39,8 +39,16 @@ type connIDManager struct {
 	removeStatelessResetToken func(protocol.StatelessResetToken)
 	queueControlFrame         func(wire.Frame)
 
+	// limit is how many of the peer's connection ids we store, the
+	// active_connection_id_limit we advertise; zero means MaxActiveConnectionIDs.
+	limit int
+
 	closed bool
 }
+
+// SetLimit raises how many of the peer's connection ids are stored to the
+// active_connection_id_limit advertised, when that is not quic-go's own.
+func (h *connIDManager) SetLimit(n int) { h.limit = n }
 
 func newConnIDManager(
 	initialDestConnID protocol.ConnectionID,
@@ -65,7 +73,11 @@ func (h *connIDManager) Add(f *wire.NewConnectionIDFrame) error {
 	if err := h.add(f); err != nil {
 		return err
 	}
-	if len(h.queue) >= protocol.MaxActiveConnectionIDs {
+	limit := h.limit
+	if limit == 0 {
+		limit = protocol.MaxActiveConnectionIDs
+	}
+	if len(h.queue) >= limit {
 		return &qerr.TransportError{ErrorCode: qerr.ConnectionIDLimitError}
 	}
 	return nil

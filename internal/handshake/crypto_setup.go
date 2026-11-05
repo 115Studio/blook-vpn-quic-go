@@ -67,15 +67,15 @@ type cryptoSetup struct {
 var _ CryptoSetup = &cryptoSetup{}
 
 // NewCryptoSetupClient creates a new crypto setup for the client
-// chromeParrot makes the client emit Chrome's TLS ClientHello via uTLS instead of
-// crypto/tls. It forces enable0RTT off: see newUTLSQUICClient for why resumption
-// can't be carried across the two TLS stacks.
+// A parrot makes the client emit the parroted client's TLS ClientHello via uTLS
+// instead of crypto/tls. It forces enable0RTT off: see newUTLSQUICClient for why
+// resumption can't be carried across the two TLS stacks.
 func NewCryptoSetupClient(
 	connID protocol.ConnectionID,
 	tp *wire.TransportParameters,
 	tlsConf *tls.Config,
 	enable0RTT bool,
-	chromeParrot bool,
+	parrot protocol.Parrot,
 	rttStats *utils.RTTStats,
 	qlogger qlogwriter.Recorder,
 	logger utils.Logger,
@@ -94,10 +94,10 @@ func NewCryptoSetupClient(
 	tlsConf = tlsConf.Clone()
 	tlsConf.MinVersion = tls.VersionTLS13
 	cs.tlsConf = tlsConf
-	cs.allow0RTT = enable0RTT && !chromeParrot
+	cs.allow0RTT = enable0RTT && parrot == protocol.ParrotNone
 
-	if chromeParrot {
-		conn, err := newUTLSQUICClient(tlsConf)
+	if parrot != protocol.ParrotNone {
+		conn, err := newUTLSQUICClient(tlsConf, parrot)
 		if err != nil {
 			return nil, err
 		}

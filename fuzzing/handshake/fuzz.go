@@ -281,7 +281,7 @@ func runHandshake(runConfig [confLen]byte, messageConfig uint8, clientConf *tls.
 		clientTP,
 		clientConf,
 		enable0RTTClient,
-		false,
+		protocol.ParrotNone,
 		&utils.RTTStats{},
 		nil,
 		utils.DefaultLogger.WithPrefix("client"),
