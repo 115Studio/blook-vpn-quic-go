@@ -57,3 +57,16 @@ func (ZeroLengthConnectionIDGenerator) GenerateConnectionID() (ConnectionID, err
 }
 
 func (ZeroLengthConnectionIDGenerator) ConnectionIDLen() int { return 0 }
+
+// chromeReceiveWindow resolves one receive window under the parrot from what the caller
+// set (zero when unset) and the defaults populateConfig already filled in.
+func chromeReceiveWindow(setStart, setMax, start, ceiling, chrome uint64) (uint64, uint64) {
+	if setStart == 0 {
+		start = chrome
+		if setMax != 0 {
+			start = min(start, ceiling)
+		}
+	}
+	// The auto-tuning ceiling must not sit below the starting window.
+	return start, max(ceiling, start)
+}

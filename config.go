@@ -111,14 +111,20 @@ func populateConfig(config *Config) *Config {
 		enableDatagrams = true
 		// Chrome pins these, so anything the caller asked for is overridden.
 		idleTimeout = chromeMaxIdleTimeout
-		initialStreamReceiveWindow = chromeInitialMaxStreamData
-		initialConnectionReceiveWindow = chromeInitialMaxData
 		maxIncomingStreams = chromeMaxIncomingStreams
 		maxIncomingUniStreams = chromeMaxIncomingUniStreams
 		initialPacketSize = chromeInitialPacketSize
-		// The auto-tuning ceilings must not sit below the starting windows.
-		maxStreamReceiveWindow = max(maxStreamReceiveWindow, initialStreamReceiveWindow)
-		maxConnectionReceiveWindow = max(maxConnectionReceiveWindow, initialConnectionReceiveWindow)
+		// The receive windows are Chrome's only where the caller left them unset. A
+		// window the caller set is a memory budget (iOS kills a packet tunnel at
+		// 50 MB), and it outranks matching Chrome's transport parameters: the
+		// windows the caller set stand, ceilings included, and a Chrome start
+		// window never rises above a ceiling the caller set.
+		initialStreamReceiveWindow, maxStreamReceiveWindow = chromeReceiveWindow(
+			config.InitialStreamReceiveWindow, config.MaxStreamReceiveWindow,
+			initialStreamReceiveWindow, maxStreamReceiveWindow, chromeInitialMaxStreamData)
+		initialConnectionReceiveWindow, maxConnectionReceiveWindow = chromeReceiveWindow(
+			config.InitialConnectionReceiveWindow, config.MaxConnectionReceiveWindow,
+			initialConnectionReceiveWindow, maxConnectionReceiveWindow, chromeInitialMaxData)
 	}
 
 	return &Config{

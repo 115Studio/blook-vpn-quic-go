@@ -205,18 +205,17 @@ func TestConfigZeroLimits(t *testing.T) {
 
 func TestConfigChromeParrotOverrides(t *testing.T) {
 	// ChromeParrot pins the values that show up in the transport parameters, so
-	// whatever the caller asked for must be discarded.
+	// whatever the caller asked for must be discarded; receive windows aside.
 	c := populateConfig(&Config{
-		ChromeParrot:                   true,
-		MaxIdleTimeout:                 time.Hour,
-		InitialStreamReceiveWindow:     1234,
-		InitialConnectionReceiveWindow: 4321,
-		MaxIncomingStreams:             7,
-		MaxIncomingUniStreams:          9,
-		InitialPacketSize:              1350,
+		ChromeParrot:          true,
+		MaxIdleTimeout:        time.Hour,
+		MaxIncomingStreams:    7,
+		MaxIncomingUniStreams: 9,
+		InitialPacketSize:     1350,
 	})
 
 	require.Equal(t, chromeMaxIdleTimeout, c.MaxIdleTimeout)
+	// Windows the caller left unset are Chrome's.
 	require.EqualValues(t, chromeInitialMaxStreamData, c.InitialStreamReceiveWindow)
 	require.EqualValues(t, chromeInitialMaxData, c.InitialConnectionReceiveWindow)
 	require.EqualValues(t, chromeMaxIncomingStreams, c.MaxIncomingStreams)
@@ -226,6 +225,30 @@ func TestConfigChromeParrotOverrides(t *testing.T) {
 	// The auto-tuning ceilings must never end up below the starting windows.
 	require.GreaterOrEqual(t, c.MaxStreamReceiveWindow, c.InitialStreamReceiveWindow)
 	require.GreaterOrEqual(t, c.MaxConnectionReceiveWindow, c.InitialConnectionReceiveWindow)
+}
+
+func TestConfigChromeParrotKeepsCallerReceiveWindows(t *testing.T) {
+	// A window the caller set is a memory budget and stands under the parrot.
+	c := populateConfig(&Config{
+		ChromeParrot:                   true,
+		InitialStreamReceiveWindow:     512 << 10,
+		MaxStreamReceiveWindow:         2 << 20,
+		InitialConnectionReceiveWindow: 1 << 20,
+		MaxConnectionReceiveWindow:     3 << 20,
+	})
+	require.EqualValues(t, 512<<10, c.InitialStreamReceiveWindow)
+	require.EqualValues(t, 2<<20, c.MaxStreamReceiveWindow)
+	require.EqualValues(t, 1<<20, c.InitialConnectionReceiveWindow)
+	require.EqualValues(t, 3<<20, c.MaxConnectionReceiveWindow)
+
+	// A ceiling alone caps Chrome's start window instead of being lifted by it.
+	c = populateConfig(&Config{
+		ChromeParrot:               true,
+		MaxConnectionReceiveWindow: 3 << 20,
+	})
+	require.EqualValues(t, 3<<20, c.InitialConnectionReceiveWindow)
+	require.EqualValues(t, 3<<20, c.MaxConnectionReceiveWindow)
+	require.EqualValues(t, chromeInitialMaxStreamData, c.InitialStreamReceiveWindow)
 }
 
 func TestConfigChromeParrotForcesDatagrams(t *testing.T) {
