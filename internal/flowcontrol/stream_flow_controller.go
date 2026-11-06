@@ -16,6 +16,9 @@ type streamFlowController struct {
 
 	connection connectionFlowControllerI
 
+	// The peer's receive window for this stream, from its transport parameters.
+	peerWindow protocol.ByteCount
+
 	receivedFinalOffset bool
 }
 
@@ -31,14 +34,17 @@ func NewStreamFlowController(
 	rttStats *utils.RTTStats,
 	logger utils.Logger,
 ) StreamFlowController {
+	connection := cfc.(connectionFlowControllerI)
 	return &streamFlowController{
 		streamID:   streamID,
-		connection: cfc.(connectionFlowControllerI),
+		connection: connection,
+		peerWindow: initialSendWindow,
 		baseFlowController: baseFlowController{
 			rttStats:             rttStats,
 			receiveWindow:        receiveWindow,
 			receiveWindowSize:    receiveWindow,
 			maxReceiveWindowSize: maxReceiveWindow,
+			updateThreshold:      connection.windowUpdateThreshold(),
 			sendWindow:           initialSendWindow,
 			logger:               logger,
 		},
@@ -123,7 +129,8 @@ func (c *streamFlowController) AddBytesSent(n protocol.ByteCount) {
 }
 
 func (c *streamFlowController) SendWindowSize() protocol.ByteCount {
-	return min(c.baseFlowController.SendWindowSize(), c.connection.SendWindowSize())
+	hold := sendHold(c.peerWindow, c.connection.streamBudget())
+	return min(c.sendWindowSizeUnder(hold), c.connection.SendWindowSize())
 }
 
 func (c *streamFlowController) IsNewlyBlocked() bool {

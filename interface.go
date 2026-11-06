@@ -167,6 +167,12 @@ type Config struct {
 	// is queued (RFC 9000 recommends 2, the default). A bulk receiver can raise
 	// it (10-20) to send fewer ACKs; the max_ack_delay timer still bounds latency.
 	AckThreshold int
+	// WindowUpdateThreshold is the fraction of a receive window read before a higher
+	// limit is advertised (0, the default, means a quarter). A peer that caps what sits
+	// unread here (Conn.SetSendBudget) learns about reads only at this granularity, so a
+	// receiver that asks for such a cap lowers it (1/16) to keep the peer's view fresh.
+	// The cadence of these frames is encrypted; the transport parameters don't change.
+	WindowUpdateThreshold float64
 	// InitialDestinationConnectionID, if set, picks the destination connection ID of a client's
 	// first Initial in place of quic-go's random one, so an application can carry something in
 	// it (an admission token a front reads before routing the flow). The ID must be 8 to 20

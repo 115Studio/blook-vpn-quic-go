@@ -162,6 +162,7 @@ func populateConfig(config *Config) *Config {
 		InitialPacketSize:                initialPacketSize,
 		DisablePathMTUDiscovery:          config.DisablePathMTUDiscovery,
 		AckThreshold:                     config.AckThreshold,
+		WindowUpdateThreshold:            config.WindowUpdateThreshold,
 		InitialDestinationConnectionID:   config.InitialDestinationConnectionID,
 		EnableStreamResetPartialDelivery: config.EnableStreamResetPartialDelivery,
 		Allow0RTT:                        config.Allow0RTT,

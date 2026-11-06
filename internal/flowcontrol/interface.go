@@ -34,6 +34,8 @@ type ConnectionFlowController interface {
 	AddBytesRead(protocol.ByteCount) (hasWindowUpdate bool)
 	Reset() error
 	IsNewlyBlocked() (bool, protocol.ByteCount)
+	SetWindowUpdateThreshold(float64)
+	SetSendBudget(budget, streamBudget, peerWindow protocol.ByteCount)
 }
 
 type connectionFlowControllerI interface {
@@ -43,4 +45,6 @@ type connectionFlowControllerI interface {
 	EnsureMinimumWindowSize(protocol.ByteCount, monotime.Time)
 	// for receiving
 	IncrementHighestReceived(protocol.ByteCount, monotime.Time) error
+	windowUpdateThreshold() float64
+	streamBudget() protocol.ByteCount
 }

@@ -23,6 +23,9 @@ type baseFlowController struct {
 	receiveWindow        protocol.ByteCount
 	receiveWindowSize    protocol.ByteCount
 	maxReceiveWindowSize protocol.ByteCount
+	// The fraction of the window read before a higher limit is advertised. A sender
+	// that budgets what sits unread here sees the reads only at this granularity.
+	updateThreshold float64
 
 	allowWindowIncrease func(size protocol.ByteCount) bool
 
@@ -58,11 +61,18 @@ func (c *baseFlowController) UpdateSendWindow(offset protocol.ByteCount) (update
 }
 
 func (c *baseFlowController) SendWindowSize() protocol.ByteCount {
+	return c.sendWindowSizeUnder(0)
+}
+
+// sendWindowSizeUnder is the send window left when hold bytes of the peer's credit
+// stay unused (see sendHold).
+func (c *baseFlowController) sendWindowSizeUnder(hold protocol.ByteCount) protocol.ByteCount {
+	limit := c.sendWindow - min(hold, c.sendWindow)
 	// this only happens during connection establishment, when data is sent before we receive the peer's transport parameters
-	if c.bytesSent > c.sendWindow {
+	if c.bytesSent > limit {
 		return 0
 	}
-	return c.sendWindow - c.bytesSent
+	return limit - c.bytesSent
 }
 
 // needs to be called with locked mutex
@@ -73,7 +83,7 @@ func (c *baseFlowController) addBytesRead(n protocol.ByteCount) {
 func (c *baseFlowController) hasWindowUpdate() bool {
 	bytesRemaining := c.receiveWindow - c.bytesRead
 	// update the window when more than the threshold was consumed
-	return bytesRemaining <= protocol.ByteCount(float64(c.receiveWindowSize)*(1-protocol.WindowUpdateThreshold))
+	return bytesRemaining <= protocol.ByteCount(float64(c.receiveWindowSize)*(1-c.updateThreshold))
 }
 
 // getWindowUpdate updates the receive window, if necessary

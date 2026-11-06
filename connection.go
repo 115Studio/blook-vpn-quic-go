@@ -555,6 +555,7 @@ func (c *Conn) preSetup() {
 		c.rttStats,
 		c.logger,
 	)
+	c.connFlowController.SetWindowUpdateThreshold(c.config.WindowUpdateThreshold)
 	c.earlyConnReadyChan = make(chan struct{})
 	c.streamsMap = newStreamsMap(
 		c.ctx,

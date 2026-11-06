@@ -3,6 +3,7 @@ package flowcontrol
 import (
 	"errors"
 	"fmt"
+	"sync/atomic"
 
 	"github.com/apernet/quic-go/internal/monotime"
 	"github.com/apernet/quic-go/internal/protocol"
@@ -12,6 +13,10 @@ import (
 
 type connectionFlowController struct {
 	baseFlowController
+
+	// Set by the application while the connection runs, so they are atomic.
+	sendHold         atomic.Int64
+	streamSendBudget atomic.Int64
 }
 
 var _ ConnectionFlowController = &connectionFlowController{}
@@ -31,10 +36,40 @@ func NewConnectionFlowController(
 			receiveWindow:        receiveWindow,
 			receiveWindowSize:    receiveWindow,
 			maxReceiveWindowSize: maxReceiveWindow,
+			updateThreshold:      protocol.WindowUpdateThreshold,
 			allowWindowIncrease:  allowWindowIncrease,
 			logger:               logger,
 		},
 	}
+}
+
+// SetWindowUpdateThreshold sets the fraction of a receive window read before a higher
+// limit is advertised, for the connection and the streams opened after it. It must be
+// called before the connection receives data.
+func (c *connectionFlowController) SetWindowUpdateThreshold(threshold float64) {
+	if threshold > 0 && threshold < 1 {
+		c.updateThreshold = threshold
+	}
+}
+
+func (c *connectionFlowController) windowUpdateThreshold() float64 {
+	return c.updateThreshold
+}
+
+// SetSendBudget caps what this side sends at what the peer read plus budget, on the
+// connection and on each stream (streamBudget; 0 lifts a cap). peerWindow is the
+// connection receive window in the peer's transport parameters.
+func (c *connectionFlowController) SetSendBudget(budget, streamBudget, peerWindow protocol.ByteCount) {
+	c.sendHold.Store(int64(sendHold(peerWindow, budget)))
+	c.streamSendBudget.Store(int64(max(streamBudget, 0)))
+}
+
+func (c *connectionFlowController) SendWindowSize() protocol.ByteCount {
+	return c.sendWindowSizeUnder(protocol.ByteCount(c.sendHold.Load()))
+}
+
+func (c *connectionFlowController) streamBudget() protocol.ByteCount {
+	return protocol.ByteCount(c.streamSendBudget.Load())
 }
 
 // IncrementHighestReceived adds an increment to the highestReceived value
